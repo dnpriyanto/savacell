@@ -87,7 +87,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <i class="fas fa-user absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm"></i>
             <input type="text" name="username" required placeholder="Masukkan username"
               value="<?= e($_POST['username'] ?? '') ?>"
-              class="w-full pl-9 pr-4 py-3 rounded-xl text-sm transition-all">
+              class="w-full pl-9 pr-4 py-3 rounded-xl text-sm transition-all text-gray-500">
           </div>
         </div>
         <div class="mb-6">
@@ -95,7 +95,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           <div class="relative">
             <i class="fas fa-lock absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm"></i>
             <input type="password" name="password" required placeholder="Masukkan password"
-              class="w-full pl-9 pr-4 py-3 rounded-xl text-sm transition-all">
+              class="w-full pl-9 pr-4 py-3 rounded-xl text-sm transition-all text-gray-500">
           </div>
         </div>
         <button type="submit" class="btn-login w-full py-3 rounded-xl text-white font-bold text-sm transition-all">
