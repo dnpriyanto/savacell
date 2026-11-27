@@ -16,37 +16,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($action === 'add') {
         if ($nama && $uname && $pass) {
-            $hash = password_hash($pass, PASSWORD_DEFAULT);
-            $res  = dbInsert("INSERT INTO pegawai (nama_pegawai, username, password, level) VALUES (?,?,?,?)", 'ssss', [$nama, $uname, $hash, $level]);
-            setFlash($res ? 'success' : 'error', $res ? 'Pegawai berhasil ditambahkan.' : 'Username sudah digunakan.');
+            $existing = csvFindOne('pegawai', 'username', $uname);
+            if (!$existing) {
+                csvInsert('pegawai', [
+                    'nama_pegawai' => $nama,
+                    'username' => $uname,
+                    'password' => $pass,
+                    'level' => $level,
+                    'created_at' => date('Y-m-d H:i:s'),
+                ]);
+                setFlash('success', 'Pegawai berhasil ditambahkan.');
+            } else {
+                setFlash('error', 'Username sudah digunakan.');
+            }
         } else {
             setFlash('error', 'Semua kolom wajib diisi.');
         }
     } elseif ($action === 'edit') {
         $id = (int)$_POST['id_pegawai'];
+        $updateData = [
+            'nama_pegawai' => $nama,
+            'username' => $uname,
+            'level' => $level,
+        ];
         if ($pass) {
-            $hash = password_hash($pass, PASSWORD_DEFAULT);
-            dbQuery("UPDATE pegawai SET nama_pegawai=?, username=?, password=?, level=? WHERE id_pegawai=?", 'ssssi', [$nama, $uname, $hash, $level, $id]);
-        } else {
-            dbQuery("UPDATE pegawai SET nama_pegawai=?, username=?, level=? WHERE id_pegawai=?", 'sssi', [$nama, $uname, $level, $id]);
+            $updateData['password'] = $pass;
         }
+        csvUpdate('pegawai', 'id_pegawai', $id, $updateData);
         setFlash('success', 'Data pegawai diperbarui.');
     } elseif ($action === 'delete') {
         $id = (int)$_POST['id_pegawai'];
         if ($id == currentUser()['id']) {
             setFlash('error', 'Tidak dapat menghapus akun sendiri.');
         } else {
-            dbQuery("DELETE FROM pegawai WHERE id_pegawai=?", 'i', [$id]);
+            csvDelete('pegawai', 'id_pegawai', $id);
             setFlash('success', 'Pegawai dihapus.');
         }
     }
     header('Location: pegawai.php'); exit;
 }
 
-$rows = dbFetchAll("SELECT * FROM pegawai ORDER BY level ASC, nama_pegawai ASC");
+$rows = csvReadAll('pegawai');
+$rows = csvSort($rows, 'nama_pegawai', 'ASC');
 $editData = null;
 if (isset($_GET['edit'])) {
-    $editData = dbFetchOne("SELECT * FROM pegawai WHERE id_pegawai=?", 'i', [(int)$_GET['edit']]);
+    $editData = csvFindOne('pegawai', 'id_pegawai', (int)$_GET['edit']);
 }
 
 require_once __DIR__ . '/../includes/header.php';

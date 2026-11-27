@@ -15,33 +15,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($action === 'add') {
         if ($nama) {
-            dbInsert("INSERT INTO bahan_baku (nama_bahan, stok_sisa, satuan) VALUES (?,?,?)", 'sds', [$nama, $stok, $satuan]);
+            csvInsert('bahan_baku', [
+                'nama_bahan' => $nama,
+                'stok_sisa' => $stok,
+                'satuan' => $satuan,
+                'updated_at' => date('Y-m-d H:i:s'),
+            ]);
             setFlash('success', 'Bahan baku berhasil ditambahkan.');
         } else {
             setFlash('error', 'Nama bahan wajib diisi.');
         }
     } elseif ($action === 'edit') {
         $id = (int)$_POST['id_bahan'];
-        dbQuery("UPDATE bahan_baku SET nama_bahan=?, stok_sisa=?, satuan=? WHERE id_bahan=?", 'sdsi', [$nama, $stok, $satuan, $id]);
+        csvUpdate('bahan_baku', 'id_bahan', $id, [
+            'nama_bahan' => $nama,
+            'stok_sisa' => $stok,
+            'satuan' => $satuan,
+            'updated_at' => date('Y-m-d H:i:s'),
+        ]);
         setFlash('success', 'Stok berhasil diperbarui.');
     } elseif ($action === 'topup') {
-        // Top-up / add to existing stock
         $id     = (int)$_POST['id_bahan'];
         $tambah = (float)($_POST['tambah'] ?? 0);
-        dbQuery("UPDATE bahan_baku SET stok_sisa = stok_sisa + ? WHERE id_bahan=?", 'di', [$tambah, $id]);
+        $item = csvFindOne('bahan_baku', 'id_bahan', $id);
+        if ($item) {
+            $newStok = (float)($item['stok_sisa'] ?? 0) + $tambah;
+            csvUpdate('bahan_baku', 'id_bahan', $id, [
+                'stok_sisa' => $newStok,
+                'updated_at' => date('Y-m-d H:i:s'),
+            ]);
+        }
         setFlash('success', 'Stok berhasil di-top up.');
     } elseif ($action === 'delete') {
         $id = (int)$_POST['id_bahan'];
-        dbQuery("DELETE FROM bahan_baku WHERE id_bahan=?", 'i', [$id]);
+        csvDelete('bahan_baku', 'id_bahan', $id);
         setFlash('success', 'Bahan baku dihapus.');
     }
     header('Location: bahan_baku.php'); exit;
 }
 
-$rows     = dbFetchAll("SELECT * FROM bahan_baku ORDER BY nama_bahan ASC");
+$rows     = csvReadAll('bahan_baku');
+$rows     = csvSort($rows, 'nama_bahan', 'ASC');
 $editData = null;
 if (isset($_GET['edit'])) {
-    $editData = dbFetchOne("SELECT * FROM bahan_baku WHERE id_bahan=?", 'i', [(int)$_GET['edit']]);
+    $editData = csvFindOne('bahan_baku', 'id_bahan', (int)$_GET['edit']);
 }
 $topupId = (int)($_GET['topup'] ?? 0);
 
@@ -97,7 +114,7 @@ require_once __DIR__ . '/../includes/header.php';
 
     <!-- Top-up Quick Form -->
     <?php if ($topupId > 0):
-      $topupItem = dbFetchOne("SELECT * FROM bahan_baku WHERE id_bahan=?", 'i', [$topupId]);
+      $topupItem = csvFindOne('bahan_baku', 'id_bahan', $topupId);
     ?>
     <div class="card-glass rounded-2xl p-5" style="border-color: rgba(16,185,129,0.3);">
       <h2 class="font-bold text-white mb-3 flex items-center gap-2">

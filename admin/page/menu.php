@@ -28,6 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'add' || $action === 'edit') {
         $nama    = trim($_POST['nama_produk'] ?? '');
         $harga   = (float)($_POST['harga_jual'] ?? 0);
+        $hargaModal = (float)($_POST['harga_modal'] ?? 0);
         $kat     = in_array($_POST['kategori'] ?? '', ['pulsa','paket data','aksesoris','voucher']) ? $_POST['kategori'] : 'pulsa';
         $stok    = (int)($_POST['stok'] ?? 0);
         $aktif   = isset($_POST['is_active']) ? 1 : 0;
@@ -61,13 +62,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($nama && $harga >= 0) {
             if ($action === 'add') {
-                dbInsert("INSERT INTO menu (nama_produk, harga_jual, kategori, foto_produk, stok, is_active) VALUES (?,?,?,?,?,?)",
-                    'sdssii', [$nama, $harga, $kat, $foto, $stok, $aktif]);
+                $newId = csvInsert('menu', [
+                    'nama_produk' => $nama,
+                    'harga_jual' => $harga,
+                    'harga_modal' => $hargaModal,
+                    'kategori' => $kat,
+                    'foto_produk' => $foto,
+                    'stok' => $stok,
+                    'is_active' => $aktif,
+                    'created_at' => date('Y-m-d H:i:s'),
+                ]);
+                // Log stock history
+                if ($stok > 0) {
+                    logStockChange($newId, $nama, 0, $stok, 'Produk baru ditambahkan');
+                }
                 setFlash('success', 'Produk berhasil ditambahkan.');
             } else {
                 $id = (int)$_POST['id_menu'];
-                dbQuery("UPDATE menu SET nama_produk=?, harga_jual=?, kategori=?, foto_produk=?, stok=?, is_active=? WHERE id_menu=?",
-                    'sdssiii', [$nama, $harga, $kat, $foto, $stok, $aktif, $id]);
+                $oldData = csvFindOne('menu', 'id_menu', $id);
+                $oldStok = (int)($oldData['stok'] ?? 0);
+                csvUpdate('menu', 'id_menu', $id, [
+                    'nama_produk' => $nama,
+                    'harga_jual' => $harga,
+                    'harga_modal' => $hargaModal,
+                    'kategori' => $kat,
+                    'foto_produk' => $foto,
+                    'stok' => $stok,
+                    'is_active' => $aktif,
+                ]);
+                // Log stock change
+                if ($stok != $oldStok) {
+                    logStockChange($id, $nama, $oldStok, $stok, 'Edit produk (stok diubah manual)');
+                }
                 setFlash('success', 'Produk berhasil diperbarui.');
             }
         } else {
@@ -75,28 +101,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     } elseif ($action === 'delete') {
         $id   = (int)$_POST['id_menu'];
-        $item = dbFetchOne("SELECT foto_produk FROM menu WHERE id_menu=?", 'i', [$id]);
+        $item = csvFindOne('menu', 'id_menu', $id);
         if ($item && $item['foto_produk'] && file_exists($UPLOAD_DIR . $item['foto_produk'])) {
             @unlink($UPLOAD_DIR . $item['foto_produk']);
         }
-        dbQuery("DELETE FROM menu WHERE id_menu=?", 'i', [$id]);
+        // Log stock removal
+        logStockChange($id, $item['nama_produk'] ?? '', (int)($item['stok'] ?? 0), 0, 'Produk dihapus');
+        csvDelete('menu', 'id_menu', $id);
         setFlash('success', 'Produk dihapus.');
     } elseif ($action === 'toggle') {
         $id = (int)$_POST['id_menu'];
-        dbQuery("UPDATE menu SET is_active = 1 - is_active WHERE id_menu=?", 'i', [$id]);
+        $item = csvFindOne('menu', 'id_menu', $id);
+        if ($item) {
+            $newActive = ($item['is_active'] ?? 1) == 1 ? 0 : 1;
+            csvUpdate('menu', 'id_menu', $id, ['is_active' => $newActive]);
+        }
     }
     header('Location: menu.php'); exit;
 }
 
 $filterKat = $_GET['kat'] ?? '';
-$sql       = "SELECT * FROM menu";
-if ($filterKat) { $sql .= " WHERE kategori = '" . getDB()->real_escape_string($filterKat) . "'"; }
-$sql .= " ORDER BY kategori, nama_produk ASC";
-$rows = dbFetchAll($sql);
+$rows = csvReadAll('menu');
+if ($filterKat) {
+    $rows = array_filter($rows, fn($r) => ($r['kategori'] ?? '') === $filterKat);
+    $rows = array_values($rows);
+}
+$rows = csvSort($rows, 'nama_produk', 'ASC');
 
 $editData = null;
 if (isset($_GET['edit'])) {
-    $editData = dbFetchOne("SELECT * FROM menu WHERE id_menu=?", 'i', [(int)$_GET['edit']]);
+    $editData = csvFindOne('menu', 'id_menu', (int)$_GET['edit']);
 }
 
 $kategoriList = ['pulsa','paket data','aksesoris','voucher'];
@@ -137,6 +171,11 @@ require_once __DIR__ . '/../includes/header.php';
             <label class="text-xs font-medium text-slate-400 block mb-1">Harga Jual (Rp)</label>
             <input type="number" name="harga_jual" min="0" step="500" placeholder="0"
               value="<?= (float)($editData['harga_jual'] ?? 0) ?>" class="w-full px-3 py-2.5 rounded-xl text-sm">
+          </div>
+          <div>
+            <label class="text-xs font-medium text-slate-400 block mb-1">Harga Modal / HPP (Rp)</label>
+            <input type="number" name="harga_modal" min="0" step="500" placeholder="0"
+              value="<?= (float)($editData['harga_modal'] ?? 0) ?>" class="w-full px-3 py-2.5 rounded-xl text-sm">
           </div>
           <div>
             <label class="text-xs font-medium text-slate-400 block mb-1">Kategori</label>

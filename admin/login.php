@@ -17,12 +17,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $password = $_POST['password'] ?? '';
 
     if ($username && $password) {
-        $pegawai = dbFetchOne(
-            "SELECT * FROM pegawai WHERE username = ?",
-            's', [$username]
-        );
+        $pegawai = csvFindOne('pegawai', 'username', $username);
         
-        // Menggunakan perbandingan teks biasa dan memperbaiki redirect path
         if ($pegawai && $password === $pegawai['password']) {
             $_SESSION['pegawai_id']    = $pegawai['id_pegawai'];
             $_SESSION['pegawai_nama']  = $pegawai['nama_pegawai'];

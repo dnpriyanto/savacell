@@ -18,11 +18,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($nama && $no_hp) {
             if ($action === 'add') {
-                dbInsert("INSERT INTO pelanggan (nama_pelanggan, no_hp, poin) VALUES (?,?,?)", 'ssi', [$nama, $no_hp, $poin]);
+                csvInsert('pelanggan', [
+                    'nama_pelanggan' => $nama,
+                    'no_hp' => $no_hp,
+                    'poin' => $poin,
+                    'created_at' => date('Y-m-d H:i:s'),
+                ]);
                 setFlash('success', 'Pelanggan berhasil ditambahkan.');
             } else {
                 $id = (int)$_POST['id_pelanggan'];
-                dbQuery("UPDATE pelanggan SET nama_pelanggan=?, no_hp=?, poin=? WHERE id_pelanggan=?", 'ssii', [$nama, $no_hp, $poin, $id]);
+                csvUpdate('pelanggan', 'id_pelanggan', $id, [
+                    'nama_pelanggan' => $nama,
+                    'no_hp' => $no_hp,
+                    'poin' => $poin,
+                ]);
                 setFlash('success', 'Data pelanggan berhasil diperbarui.');
             }
         } else {
@@ -30,7 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     } elseif ($action === 'delete') {
         $id = (int)$_POST['id_pelanggan'];
-        dbQuery("DELETE FROM pelanggan WHERE id_pelanggan=?", 'i', [$id]);
+        csvDelete('pelanggan', 'id_pelanggan', $id);
         setFlash('success', 'Pelanggan berhasil dihapus.');
     }
     header('Location: pelanggan.php'); exit;
@@ -38,20 +47,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // Fetch & search
 $search = trim($_GET['q'] ?? '');
-$sql = "SELECT * FROM pelanggan";
-$params = [];
+$rows = csvReadAll('pelanggan');
 if ($search) {
-    $sql .= " WHERE nama_pelanggan LIKE ? OR no_hp LIKE ?";
-    $params = ["%$search%", "%$search%"];
+    $rows = array_filter($rows, fn($r) => 
+        stripos($r['nama_pelanggan'] ?? '', $search) !== false || 
+        stripos($r['no_hp'] ?? '', $search) !== false
+    );
+    $rows = array_values($rows);
 }
-$sql .= " ORDER BY id_pelanggan DESC";
-$rows = $search
-    ? dbFetchAll($sql, 'ss', $params)
-    : dbFetchAll($sql);
+$rows = csvSort($rows, 'id_pelanggan', 'DESC');
 
 $editData = null;
 if (isset($_GET['edit'])) {
-    $editData = dbFetchOne("SELECT * FROM pelanggan WHERE id_pelanggan=?", 'i', [(int)$_GET['edit']]);
+    $editData = csvFindOne('pelanggan', 'id_pelanggan', (int)$_GET['edit']);
 }
 
 require_once __DIR__ . '/../includes/header.php';

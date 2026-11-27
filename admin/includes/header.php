@@ -152,6 +152,20 @@ $currentPage = basename($_SERVER['PHP_SELF'], '.php');
       <a href="/SAVACELL/admin/page/pegawai.php" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium <?= $currentPage === 'pegawai' ? 'active' : 'text-slate-400' ?>">
         <i class="fas fa-user-tie w-4 text-center"></i> Pegawai
       </a>
+
+      <p class="text-xs font-semibold uppercase tracking-widest px-3 py-2 mt-3" style="color: rgba(255,255,255,0.3);">Analitik</p>
+
+      <a href="/SAVACELL/admin/page/laba_rugi.php" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium <?= $currentPage === 'laba_rugi' ? 'active' : 'text-slate-400' ?>">
+        <i class="fas fa-balance-scale w-4 text-center"></i> Laba & Rugi
+      </a>
+
+      <a href="/SAVACELL/admin/page/stock_history.php" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium <?= $currentPage === 'stock_history' ? 'active' : 'text-slate-400' ?>">
+        <i class="fas fa-history w-4 text-center"></i> Riwayat Stok
+      </a>
+
+      <a href="/SAVACELL/admin/page/grafik_penjualan.php" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium <?= $currentPage === 'grafik_penjualan' ? 'active' : 'text-slate-400' ?>">
+        <i class="fas fa-chart-bar w-4 text-center"></i> Grafik Penjualan
+      </a>
     <?php endif; ?>
 
   </nav>

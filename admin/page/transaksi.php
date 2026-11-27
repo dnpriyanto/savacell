@@ -20,9 +20,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_checkout'])) {
 
     // Validate items & calc total
     $validated = [];
+    $allMenu = csvReadAll('menu');
+    $menuLookup = [];
+    foreach ($allMenu as $m) $menuLookup[$m['id_menu']] = $m;
+
     foreach ($items as $it) {
-        $prod = dbFetchOne("SELECT * FROM menu WHERE id_menu=? AND is_active=1", 'i', [(int)$it['id_menu']]);
-        if (!$prod) { echo json_encode(['ok'=>false,'msg'=>"Produk tidak ditemukan/tidak aktif"]); exit; }
+        $prod = $menuLookup[(int)$it['id_menu']] ?? null;
+        if (!$prod || !$prod['is_active']) { echo json_encode(['ok'=>false,'msg'=>"Produk tidak ditemukan/tidak aktif"]); exit; }
         $qty      = max(1, (int)$it['jumlah']);
         $subtotal = $prod['harga_jual'] * $qty;
         $total   += $subtotal;
@@ -40,45 +44,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_checkout'])) {
 
     if ($bayar < $total) { echo json_encode(['ok'=>false,'msg'=>'Uang bayar kurang dari total']); exit; }
 
-    $db = getDB();
-    $db->begin_transaction();
     try {
         // Insert transaksi
-        $db->query("INSERT INTO transaksi (id_pelanggan, id_pegawai, total_bayar, bayar, kembalian)
-                    VALUES (" . ($pelId ?? 'NULL') . ", {$user['id']}, $total, $bayar, " . ($bayar - $total) . ")");
-        $trxId = $db->insert_id;
+        $trxId = csvInsert('transaksi', [
+            'id_pelanggan' => $pelId ?? '',
+            'id_pegawai' => $user['id'],
+            'total_bayar' => $total,
+            'bayar' => $bayar,
+            'kembalian' => $bayar - $total,
+            'status' => 'selesai',
+            'tanggal_transaksi' => date('Y-m-d H:i:s'),
+        ]);
 
         foreach ($validated as $it) {
             // Insert detail
-            $db->query("INSERT INTO detail_transaksi (id_transaksi, id_menu, jumlah, harga_satuan, subtotal, nomor_tujuan)
-                        VALUES ($trxId, {$it['id_menu']}, {$it['qty']}, {$it['harga']}, {$it['subtotal']},
-                        '" . $db->real_escape_string($it['nomor_tujuan']) . "')");
-            // Deduct stock
-            $db->query("UPDATE menu SET stok = stok - {$it['qty']} WHERE id_menu = {$it['id_menu']}");
-            // Deduct bahan_baku saldo if pulsa/paket data
-            if (in_array($it['kategori'], ['pulsa','paket data'])) {
-                // Find matching bahan_baku by keyword (simple heuristic)
-                $keywords = ['Telkomsel','Indosat','XL','Axis','Tri','Smartfren'];
-                foreach ($keywords as $kw) {
-                    if (stripos($it['nama'], $kw) !== false) {
-                        $db->query("UPDATE bahan_baku SET stok_sisa = stok_sisa - {$it['subtotal']}
-                                    WHERE nama_bahan LIKE '%$kw%' AND stok_sisa >= {$it['subtotal']} LIMIT 1");
-                        break;
-                    }
-                }
-            }
+            csvInsert('detail_transaksi', [
+                'id_transaksi' => $trxId,
+                'id_menu' => $it['id_menu'],
+                'jumlah' => $it['qty'],
+                'harga_satuan' => $it['harga'],
+                'subtotal' => $it['subtotal'],
+                'nomor_tujuan' => $it['nomor_tujuan'],
+            ]);
+            
+            // Deduct stock & log
+            $oldStok = (int)$it['stok'];
+            $newStok = $oldStok - $it['qty'];
+            csvUpdate('menu', 'id_menu', $it['id_menu'], ['stok' => $newStok]);
+            logStockChange($it['id_menu'], $it['nama'], $oldStok, $newStok, 'Penjualan #' . $trxId);
         }
 
         // Add loyalty points (1 poin per Rp 1000)
         if ($pelId) {
-            $poin = (int)floor($total / 1000);
-            $db->query("UPDATE pelanggan SET poin = poin + $poin WHERE id_pelanggan = $pelId");
+            $pel = csvFindOne('pelanggan', 'id_pelanggan', $pelId);
+            if ($pel) {
+                $poin = (int)floor($total / 1000);
+                csvUpdate('pelanggan', 'id_pelanggan', $pelId, [
+                    'poin' => ((int)($pel['poin'] ?? 0)) + $poin,
+                ]);
+            }
         }
 
-        $db->commit();
         echo json_encode(['ok'=>true,'trx_id'=>$trxId,'total'=>$total,'kembalian'=>$bayar-$total]);
     } catch (Throwable $e) {
-        $db->rollback();
         echo json_encode(['ok'=>false,'msg'=>'Error: '.$e->getMessage()]);
     }
     exit;
@@ -87,13 +95,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_checkout'])) {
 // ---- AJAX: Search customer ----
 if (isset($_GET['search_pelanggan'])) {
     header('Content-Type: application/json');
-    $q = '%' . trim($_GET['q'] ?? '') . '%';
-    echo json_encode(dbFetchAll("SELECT id_pelanggan, nama_pelanggan, no_hp, poin FROM pelanggan WHERE nama_pelanggan LIKE ? OR no_hp LIKE ? LIMIT 8", 'ss', [$q, $q]));
+    $q = trim($_GET['q'] ?? '');
+    $pelanggan = csvReadAll('pelanggan');
+    $results = array_filter($pelanggan, fn($p) => 
+        stripos($p['nama_pelanggan'] ?? '', $q) !== false || 
+        stripos($p['no_hp'] ?? '', $q) !== false
+    );
+    echo json_encode(array_values(array_slice($results, 0, 8)));
     exit;
 }
 
 // Products for POS
-$products = dbFetchAll("SELECT * FROM menu WHERE is_active=1 ORDER BY kategori, nama_produk");
+$products = csvReadAll('menu');
+$products = array_filter($products, fn($p) => ($p['is_active'] ?? 0) == 1);
+$products = array_values(csvSort($products, 'nama_produk', 'ASC'));
 
 require_once __DIR__ . '/../includes/header.php';
 ?>
